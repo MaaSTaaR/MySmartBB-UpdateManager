@@ -31,6 +31,7 @@ public class SettingWindow
 	private static Preferences prefs;
 	private static JTextField ftpDirTxt;
 	private static JComboBox languagesList;
+	private static JTextField urlTxt;
 
 	public static void show()
 	{
@@ -43,6 +44,7 @@ public class SettingWindow
 		ftpServerTxt.setText( prefs.get( "ftp_server", "" ) );
 		ftpUsernameTxt.setText( prefs.get( "ftp_username", "" ) );
 		ftpDirTxt.setText( prefs.get( "ftp_dir", "." ) );
+		urlTxt.setText( prefs.get( "forum_url", "http://" ) );
 		
 		String language = prefs.get( "language", "en" );
 		
@@ -71,7 +73,7 @@ public class SettingWindow
 		
 		mainWin = new JFrame( Main.getMessage( "setting" ) );
 		
-		mainWin.setSize( 400, 550 );
+		mainWin.setSize( 420, 650 );
 		
 		// Shows the window near to the mouse cursor
 		mainWin.setLocation( MouseInfo.getPointerInfo().getLocation() );
@@ -102,6 +104,7 @@ public class SettingWindow
 	{
 		createMainDirPane();
 		createFTPSettingPane();
+		createForumURLPane();
 		createInterfaceLanguagePane();
 		createApplyBtn();
 	}
@@ -188,6 +191,19 @@ public class SettingWindow
 		ftpSettingPane.add( ftpDirPane );
 		
 		mainPane.add( ftpSettingPane );
+	}
+	
+	private static void createForumURLPane() 
+	{
+		JPanel urlPane = new JPanel();
+		urlPane.setComponentOrientation( MainWindow.globalOrientation );
+		urlPane.setBorder( BorderFactory.createTitledBorder( Main.getMessage( "forum_url" ) ));
+
+		urlTxt = new JTextField( 15 );
+		
+		urlPane.add( urlTxt );
+		
+		mainPane.add( urlPane );
 	}
 	
 	private static void createInterfaceLanguagePane() 

@@ -1,8 +1,15 @@
+import it.sauronsoftware.ftp4j.FTPAbortedException;
+import it.sauronsoftware.ftp4j.FTPClient;
+import it.sauronsoftware.ftp4j.FTPDataTransferException;
+import it.sauronsoftware.ftp4j.FTPException;
+import it.sauronsoftware.ftp4j.FTPIllegalReplyException;
+
 import java.awt.image.BufferedImage;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.net.ConnectException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -63,8 +70,6 @@ public class Updater
 			updated_files = result.getUpdatedFiles();
 			failed_files = app.getFailedFiles();
 			
-			System.out.println( "Failed Files Size : " + failed_files.isEmpty() );
-			
 			// The applying process failed for some files. 
 			// We need to download a complete copy of these files and change the current with the new one. 
 			if ( !failed_files.isEmpty() )
@@ -120,9 +125,136 @@ public class Updater
 		return true;
 	}
 	
-	public void uploadUpdatedFiles()
+	public void uploadUpdatedFiles( String ftp_server, String ftp_username, String ftp_password, String ftp_dir, FTPListener listener )
 	{
-		// ...
+		listener.connecting();
+		
+		FTPClient ftp = new FTPClient();
+		
+		try {
+			ftp.connect( ftp_server );
+			
+			listener.connected();
+			
+			ftp.login( ftp_username, ftp_password );
+			
+			listener.loggedin();
+			
+			ftp.changeDirectory( ftp_dir );
+			
+			listener.dir_found();
+			
+			// ... //
+			
+			Updater updater = Main.getUpdater();
+			
+			List<File> files = updater.getUpdatedFiles();
+			
+			files.addAll( updater.getDownloadedFiles() );
+			
+			// There is an upgrade to a minor/major version of MySmartBB.
+			// We have to upload upgrade files.
+			if ( Main.getClient().needsUpgrade() )
+				addUpgradeFiles( new File( Main.getMainDir() + "/setup" ), files );
+			
+			Iterator<File> it = files.iterator();
+			
+			while ( it.hasNext() )
+			{
+				ftp.changeDirectory( ftp_dir );
+				
+				File file = it.next();
+				
+				String path = file.getAbsolutePath();
+				
+				if ( path.contains( "/setup/install" ) )
+					continue;
+				
+				path = path.replace( Main.getMainDir(), "" );
+				path = path.replace( file.getName(), "" );
+				
+				String dirs[] = path.split( File.separator );
+				
+				System.out.println( "File : " + file.getName() );
+				
+				for ( String dir : dirs )
+				{
+					System.out.println( dir );
+					
+					try {
+						ftp.changeDirectory( dir );
+					}
+					catch (FTPException e)
+					{
+						if ( e.getCode() == 550 )
+						{
+							ftp.createDirectory( dir );
+							ftp.changeDirectory( dir );
+						}
+						else
+						{
+							e.printStackTrace();
+						}
+					}
+					finally { }
+				}
+				
+				try {
+					System.out.println( "File == " + file.getAbsolutePath() );
+					
+					ftp.upload( file, new TransferListener( file.getName() ) );
+				} 
+				catch (FTPDataTransferException e) { e.printStackTrace(); } 
+				catch (FTPAbortedException e) { e.printStackTrace(); }
+			}
+			
+			// ... //
+			
+			ftp.disconnect( true );
+			
+			Main.getClient().setBaseCommit( Main.getClient().getLatestCommitSHA() );
+			
+			listener.update_finished();
+		}
+		catch (ConnectException e) 
+		{ 
+			listener.cant_connect();
+		}
+		catch (IllegalStateException e) { e.printStackTrace(); } 
+		catch (IOException e) { e.printStackTrace(); } 
+		catch (FTPIllegalReplyException e) { e.printStackTrace(); }
+		catch (FTPException e) 
+		{
+			if ( e.getCode() == 530 )
+				listener.incorrect_username_or_password();
+			else if ( e.getCode() == 550 )
+				listener.dir_doesnt_exist();
+			else
+				e.printStackTrace(); 
+		}
+		finally { }
+	}
+	
+	private void addUpgradeFiles( File dir, List<File> list )
+	{
+		File[] children = dir.listFiles();
+		
+		for ( int k = 0; k < children.length; k++ )
+		{
+			File child = children[ k ];
+			
+			if ( child.isFile() )
+			{
+				list.add( child );
+			}
+			else
+			{
+				if ( child.getAbsolutePath().contains( "install" ) )
+					continue;
+				else
+					addUpgradeFiles( child, list );
+			}
+		}
 	}
 	
 	public List<File> getUpdatedFiles()

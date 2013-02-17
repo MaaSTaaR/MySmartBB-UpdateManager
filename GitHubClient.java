@@ -13,7 +13,9 @@ import javax.imageio.ImageIO;
 import org.eclipse.egit.github.core.Commit;
 import org.eclipse.egit.github.core.CommitFile;
 import org.eclipse.egit.github.core.Repository;
+import org.eclipse.egit.github.core.RepositoryCommit;
 import org.eclipse.egit.github.core.RepositoryCommitCompare;
+import org.eclipse.egit.github.core.RepositoryTag;
 import org.eclipse.egit.github.core.client.RequestException;
 import org.eclipse.egit.github.core.service.CommitService;
 import org.eclipse.egit.github.core.service.RepositoryService;
@@ -28,6 +30,7 @@ public class GitHubClient
 	private boolean update_exists = false;
 	private int updates_number;
 	private List<CommitFile> patch_files;
+	private boolean needs_upgrade = false;
 	
 	GitHubClient( String username, String repo )
 	{
@@ -64,6 +67,38 @@ public class GitHubClient
 			this.patch_url = patch.getPatchUrl();
 			this.latest_commit_sha = latest_sha;
 			this.patch_files = patch.getFiles();
+			
+			// If there is any tag in this update that means a new version of
+			// MySmartBB has been released. The user have to open the upgrade file
+			// in his/her web site to apply database changes.
+			List<RepositoryTag> tags = sRepo.getTags( repo );
+			List<RepositoryCommit> commits = patch.getCommits();
+			
+			Iterator<RepositoryTag> tags_it = tags.iterator();
+			
+			boolean found_upgrade = false;
+			
+			while ( tags_it.hasNext() )
+			{
+				RepositoryTag tag = tags_it.next();
+				
+				Iterator<RepositoryCommit> commits_it = commits.iterator();
+				
+				while ( commits_it.hasNext() )
+				{
+					RepositoryCommit commit = commits_it.next();
+					
+					if ( commit.getSha().equals( tag.getCommit().getSha() ) )
+					{
+						needs_upgrade = found_upgrade = true;
+						
+						break;
+					}
+				}
+				
+				if ( found_upgrade )
+					break;
+			}
 		}
 	}
 	
@@ -145,5 +180,10 @@ public class GitHubClient
 	public String getLatestCommitSHA()
 	{
 		return this.latest_commit_sha;
+	}
+	
+	public boolean needsUpgrade()
+	{
+		return this.needs_upgrade;
 	}
 }

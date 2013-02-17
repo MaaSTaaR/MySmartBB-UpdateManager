@@ -25,6 +25,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPasswordField;
 import javax.swing.JScrollPane;
+import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
@@ -46,6 +47,7 @@ public class MainWindow
 	private static JList downloadedFilesList;
 	private static JScrollPane downloadedFilesScrollPane;
 	public static ComponentOrientation globalOrientation = ComponentOrientation.RIGHT_TO_LEFT;
+	private static JPanel upgradePane;
 	
 	public static void show()
 	{
@@ -110,6 +112,7 @@ public class MainWindow
 		createStatusPane();
 		createUpdatedFilesPane();
 		createDownloadedFilesPane();
+		createMajorUpgradePane();
 	}
 	
 	private static void createOperationsPane() 
@@ -155,6 +158,8 @@ public class MainWindow
 								{
 									checkingBtn.setEnabled( false );
 									updateBtn.setVisible( true );
+									
+									System.out.println( "Needs Upgrade? " + Main.getClient().needsUpgrade() );
 									
 									MainWindow.setUpdateStatus( Main.getMessage( "new_updates" ) + " " + Main.getClient().getUpdatesNumber() );
 								}
@@ -237,6 +242,26 @@ public class MainWindow
 		mainWin.add( statusPane );
 	}
 	
+	private static void createMajorUpgradePane() 
+	{
+		upgradePane = new JPanel();
+		
+		upgradePane.setBorder( BorderFactory.createTitledBorder( Main.getMessage( "there_is_major_upgrade" ) ) );
+		upgradePane.setComponentOrientation( globalOrientation );
+		
+		JLabel upgradeLbl = new JLabel( Main.getMessage( "visit_upgrade_url" ) );
+		JTextField urlTxt = new JTextField( 35 );
+		
+		urlTxt.setText( Main.getPreferences().get( "forum_url", "http://" ) + "/setup/upgrade/" );
+		
+		upgradePane.add( upgradeLbl );
+		upgradePane.add( urlTxt );
+		
+		upgradePane.setVisible( false );
+		
+		mainWin.add( upgradePane );
+	}
+	
 	private static void createUpdatedFilesPane() 
 	{
 		updatedFilesList = new JList();
@@ -304,7 +329,7 @@ public class MainWindow
 		ftp_dir = Main.getPreferences().get( "ftp_dir", "." );
 		
 		if ( ftp_server.isEmpty() || ftp_username.isEmpty() )
-		{	
+		{
 			MainWindow.setStatus( Main.getMessage( "set_ftp_info" ) );
 			uploadBtn.setVisible( true );
 		}
@@ -323,116 +348,74 @@ public class MainWindow
 				{
 					public void run()
 					{
-						//System.out.println( "Uploading ... : " + ftp_password );
-						
-						MainWindow.setStatus( Main.getMessage( "ftp_client_connecting" ) );
-						
-						FTPClient ftp = new FTPClient();
-						
-						try {
-							ftp.connect( ftp_server );
-							
-							MainWindow.setStatus( Main.getMessage( "ftp_client_connected" ) );
-							
-							ftp.login( ftp_username, ftp_password );
-							
-							MainWindow.setStatus( Main.getMessage( "ftp_client_loggedin" ) );
-							
-							ftp.changeDirectory( ftp_dir );
-							
-							MainWindow.setStatus( Main.getMessage( "ftp_client_mysmartbb_dir_found" ) );
-							
-							// ... //
-							
-							Updater updater = Main.getUpdater();
-							
-							List<File> files = updater.getUpdatedFiles();
-							
-							files.addAll( updater.getDownloadedFiles() );
-							
-							Iterator<File> it = files.iterator();
-							
-							while ( it.hasNext() )
+						FTPListener listener = new FTPListener() 
+						{
+							@Override
+							public void connecting() 
 							{
-								ftp.changeDirectory( ftp_dir );
+								MainWindow.setStatus( Main.getMessage( "ftp_client_connecting" ) );
+							}
+
+							@Override
+							public void connected() 
+							{
+								MainWindow.setStatus( Main.getMessage( "ftp_client_connected" ) );
+							}
+
+							@Override
+							public void loggedin() 
+							{
+								MainWindow.setStatus( Main.getMessage( "ftp_client_loggedin" ) );
+							}
+
+							@Override
+							public void dir_found() 
+							{
+								MainWindow.setStatus( Main.getMessage( "ftp_client_mysmartbb_dir_found" ) );
+							}
+
+							@Override
+							public void update_finished() 
+							{
+								MainWindow.setStatus( Main.getMessage( "update_succeed" ) );
+								uploadBtn.setVisible( false );
+								checkingBtn.setEnabled( true );
+								updateBtn.setVisible( false );
+								MainWindow.setUpdateStatus( Main.getMessage( "update_succeed" ) );
 								
-								File file = it.next();
-								
-								String path = file.getAbsolutePath();
-								
-								if ( path.contains( "/setup/" ) )
-									continue;
-								
-								path = path.replace( Main.getMainDir(), "" );
-								path = path.replace( file.getName(), "" );
-								
-								String dirs[] = path.split( File.separator );
-								
-								System.out.println( "File : " + file.getName() );
-								
-								for ( String dir : dirs )
+								if ( Main.getClient().needsUpgrade() )
 								{
-									System.out.println( dir );
+									mainWin.setSize( 500, 550 );
 									
-									try {
-										ftp.changeDirectory( dir );
-									}
-									catch (FTPException e)
-									{
-										if ( e.getCode() == 550 )
-										{
-											ftp.createDirectory( dir );
-											ftp.changeDirectory( dir );
-										}
-										else
-										{
-											e.printStackTrace();
-										}
-									}
-									finally { }
+									upgradePane.setVisible( true );
 								}
-								
-								try {
-									System.out.println( "File == " + file.getAbsolutePath() );
-									
-									ftp.upload( file, new TransferListener( file.getName() ) );
-								} 
-								catch (FTPDataTransferException e) { e.printStackTrace(); } 
-								catch (FTPAbortedException e) { e.printStackTrace(); }
+							}
+
+							@Override
+							public void cant_connect() 
+							{
+								uploadBtn.setVisible( true );
+								MainWindow.setStatus( Main.getMessage( "ftp_client_couldnt_connect" ) );
+							}
+
+							@Override
+							public void incorrect_username_or_password() 
+							{
+								uploadBtn.setVisible( true );
+								MainWindow.setStatus( Main.getMessage( "ftp_client_incorrect_username_password" ) );
+							}
+
+							@Override
+							public void dir_doesnt_exist() 
+							{
+								MainWindow.setStatus( Main.getMessage( "ftp_client_mysmartbb_dir_doesnt_exist" ) );
 							}
 							
-							// ... //
-							
-							ftp.disconnect( true );
-							
-							Main.getClient().setBaseCommit( Main.getClient().getLatestCommitSHA() );
-							
-							MainWindow.setStatus( Main.getMessage( "update_succeed" ) );
-							uploadBtn.setVisible( false );
-							checkingBtn.setEnabled( true );
-							updateBtn.setVisible( false );
-							MainWindow.setUpdateStatus( Main.getMessage( "update_succeed" ) );
-						}
-						catch (ConnectException e) 
-						{ 
-							uploadBtn.setVisible( true );
-							MainWindow.setStatus( Main.getMessage( "ftp_client_couldnt_connect" ) );
-						}
-						catch (IllegalStateException e) { e.printStackTrace(); } 
-						catch (IOException e) { e.printStackTrace(); } 
-						catch (FTPIllegalReplyException e) { e.printStackTrace(); }
-						catch (FTPException e) 
-						{
-							uploadBtn.setVisible( true );
-							
-							if ( e.getCode() == 530 )
-								MainWindow.setStatus( Main.getMessage( "ftp_client_incorrect_username_password" ) );
-							else if ( e.getCode() == 550 )
-								MainWindow.setStatus( Main.getMessage( "ftp_client_mysmartbb_dir_doesnt_exist" ) );
-							else
-								e.printStackTrace(); 
-						}
-						finally { }
+						};
+						
+						Main.getUpdater().uploadUpdatedFiles( ftp_server, ftp_username, 
+								ftp_password, ftp_dir, 
+								listener );
 					}
 				};
 				
