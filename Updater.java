@@ -16,8 +16,6 @@ import java.util.Iterator;
 import java.util.List;
 
 import javax.imageio.ImageIO;
-import javax.imageio.ImageWriter;
-import javax.imageio.stream.ImageOutputStream;
 
 import org.eclipse.jgit.api.ApplyResult;
 import org.eclipse.jgit.api.errors.GitAPIException;
@@ -28,7 +26,7 @@ public class Updater
 {
 	private GitHubClient client;
 	private List<File> updated_files;
-	private boolean ready_to_upload = false;
+	//private boolean ready_to_upload = false;
 	private List<File> failed_files;
 	private List<File> downloaded_files;
 	
@@ -119,7 +117,7 @@ public class Updater
 				}
 			}
 			
-			ready_to_upload = true;
+			//ready_to_upload = true;
 		}
 		
 		return true;
